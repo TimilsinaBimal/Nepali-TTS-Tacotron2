@@ -32,8 +32,8 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         self.query_layer = LinearNorm(attention_rnn_dim, attention_dim,
                                       bias=False, w_init_gain='tanh')
-        self.memory_layer = LinearNorm(embedding_dim, attention_dim, bias=False,
-                                       w_init_gain='tanh')
+        self.memory_layer = LinearNorm(
+            embedding_dim, attention_dim, bias=False, w_init_gain='tanh')
         self.v = LinearNorm(attention_dim, 1, bias=False)
         self.location_layer = LocationLayer(attention_location_n_filters,
                                             attention_location_kernel_size,
@@ -55,7 +55,8 @@ class Attention(nn.Module):
         """
 
         processed_query = self.query_layer(query.unsqueeze(1))
-        processed_attention_weights = self.location_layer(attention_weights_cat)
+        processed_attention_weights = self.location_layer(
+            attention_weights_cat)
         energies = self.v(torch.tanh(
             processed_query + processed_attention_weights + processed_memory))
 
@@ -136,11 +137,13 @@ class Postnet(nn.Module):
                          padding=int((hparams.postnet_kernel_size - 1) / 2),
                          dilation=1, w_init_gain='linear'),
                 nn.BatchNorm1d(hparams.n_mel_channels))
-            )
+        )
 
     def forward(self, x):
         for i in range(len(self.convolutions) - 1):
-            x = F.dropout(torch.tanh(self.convolutions[i](x)), 0.5, self.training)
+            x = F.dropout(
+                torch.tanh(self.convolutions[i](x)),
+                0.5, self.training)
         x = F.dropout(self.convolutions[-1](x), 0.5, self.training)
 
         return x
@@ -151,6 +154,7 @@ class Encoder(nn.Module):
         - Three 1-d convolution banks
         - Bidirectional LSTM
     """
+
     def __init__(self, hparams):
         super(Encoder, self).__init__()
 
@@ -303,7 +307,7 @@ class Decoder(nn.Module):
         decoder_inputs = decoder_inputs.transpose(1, 2)
         decoder_inputs = decoder_inputs.view(
             decoder_inputs.size(0),
-            int(decoder_inputs.size(1)/self.n_frames_per_step), -1)
+            int(decoder_inputs.size(1) / self.n_frames_per_step), -1)
         # (B, T_out, n_mel_channels) -> (T_out, B, n_mel_channels)
         decoder_inputs = decoder_inputs.transpose(0, 1)
         return decoder_inputs

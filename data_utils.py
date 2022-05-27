@@ -14,6 +14,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         2) normalizes text and converts them to sequences of one-hot vectors
         3) computes mel-spectrograms from audio files.
     """
+
     def __init__(self, audiopaths_and_text, hparams):
         self.audiopaths_and_text = load_filepaths_and_text(audiopaths_and_text)
         self.text_cleaners = hparams.text_cleaners
@@ -26,6 +27,7 @@ class TextMelLoader(torch.utils.data.Dataset):
             hparams.mel_fmax)
         random.seed(hparams.seed)
         random.shuffle(self.audiopaths_and_text)
+        # print(self.audiopaths_and_text)
 
     def get_mel_text_pair(self, audiopath_and_text):
         # separate filename and text
@@ -42,7 +44,8 @@ class TextMelLoader(torch.utils.data.Dataset):
                     sampling_rate, self.stft.sampling_rate))
             audio_norm = audio / self.max_wav_value
             audio_norm = audio_norm.unsqueeze(0)
-            audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
+            audio_norm = torch.autograd.Variable(
+                audio_norm, requires_grad=False)
             melspec = self.stft.mel_spectrogram(audio_norm)
             melspec = torch.squeeze(melspec, 0)
         else:
@@ -67,6 +70,7 @@ class TextMelLoader(torch.utils.data.Dataset):
 class TextMelCollate():
     """ Zero-pads model inputs and targets based on number of frames per setep
     """
+
     def __init__(self, n_frames_per_step):
         self.n_frames_per_step = n_frames_per_step
 
@@ -104,7 +108,7 @@ class TextMelCollate():
         for i in range(len(ids_sorted_decreasing)):
             mel = batch[ids_sorted_decreasing[i]][1]
             mel_padded[i, :, :mel.size(1)] = mel
-            gate_padded[i, mel.size(1)-1:] = 1
+            gate_padded[i, mel.size(1) - 1:] = 1
             output_lengths[i] = mel.size(1)
 
         return text_padded, input_lengths, mel_padded, gate_padded, \
