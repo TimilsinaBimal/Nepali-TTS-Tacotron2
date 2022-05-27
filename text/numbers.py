@@ -1,71 +1,99 @@
-""" from https://github.com/keithito/tacotron """
-
-import inflect
-import re
+import math
 
 
-_inflect = inflect.engine()
-_comma_number_re = re.compile(r'([0-9][0-9\,]+[0-9])')
-_decimal_number_re = re.compile(r'([0-9]+\.[0-9]+)')
-_pounds_re = re.compile(r'£([0-9\,]*[0-9]+)')
-_dollars_re = re.compile(r'\$([0-9\.\,]*[0-9]+)')
-_ordinal_re = re.compile(r'[0-9]+(st|nd|rd|th)')
-_number_re = re.compile(r'[0-9]+')
+class NumberToNepaliText():
+    def __init__(self):
+        pass
 
+    def english_to_nepali(self, number):
+        english_nepali_num = {'०': 0, '१': 1, '२': 2, '३': 3,
+                              '४': 4, '५': 5, '६': 6, '७': 7, '८': 8, '९': 9}
+        english_number = ""
+        for s in str(number):
+            english_number += str(english_nepali_num[s])
+        return english_number
 
-def _remove_commas(m):
-  return m.group(1).replace(',', '')
+    def NumberToText(self, nepali_number):
+        arrNumber = nepali_number.split('.')
+        wholePart = int(self.english_to_nepali(arrNumber[0]))
+        # print(number)
 
+        numbersUptoHundred = [
+            "शुन्य", "एक", "दुई", "तीन", "चार", "पाँच", "छ", "सात", "आठ", "नौ",
+            "दश", "एघार", "बाह्र", "तेह्र", "चौध", "पन्ध्र", "सोह्र", "सत्र",
+            "अठार", "उन्नाइस", "विस", "एक्काइस", "बाइस", "तेईस", "चौविस",
+            "पच्चिस", "छब्बिस", "सत्ताइस", "अठ्ठाईस", "उनन्तिस", "तिस",
+            "एकत्तिस", "बत्तिस", "तेत्तिस", "चौँतिस", "पैँतिस", "छत्तिस",
+            "सैँतीस", "अठतीस", "उनन्चालीस", "चालीस", "एकचालीस", "बयालीस",
+            "त्रियालीस", "चवालीस", "पैँतालीस", "छयालीस", "सच्चालीस", "अठचालीस",
+            "उनन्चास", "पचास", "एकाउन्न", "बाउन्न", "त्रिपन्न", "चउन्न",
+            "पचपन्न", "छपन्न", "सन्ताउन्न", "अन्ठाउन्न", "उनन्साठी", "साठी",
+            "एकसट्ठी", "बयसट्ठी", "त्रिसट्ठी", "चौंसट्ठी", "पैंसट्ठी",
+            "छयसट्ठी", "सतसट्ठी", "अठसट्ठी", "उनन्सत्तरी", "सत्तरी", "एकहत्तर",
+            "बहत्तर", "त्रिहत्तर", "चौहत्तर", "पचहत्तर", "छयहत्तर", "सतहत्तर",
+            "अठहत्तर", "उनासी", "असी", "एकासी", "बयासी", "त्रियासी", "चौरासी",
+            "पचासी", "छयासी", "सतासी", "अठासी", "उनान्नब्बे", "नब्बे",
+            "एकान्नब्बे", "बयानब्बे", "त्रियान्नब्बे", "चौरान्नब्बे",
+            "पन्चानब्बे", "छयान्नब्बे", "सन्तान्नब्बे", "अन्ठान्नब्बे",
+            "उनान्सय", "सय"]
+        powers = ["हजार ", "लाख", "करोड", "अर्ब", "खर्ब"]
+        # wordNumber = "रू. "
+        wordNumber = ""
+        # print(wholePart)
+        while wholePart > 99:
+            wholeNumberIntoCharArray = [s for s in str(wholePart)]
+            # print(wholeNumberIntoCharArray)
+            if len(wholeNumberIntoCharArray) < 4:
+                hundredNumber = int(math.floor(float(wholePart / 100)))
+                # print(hundredNumber)
+                wordNumber += numbersUptoHundred[hundredNumber] + " "
+                for_hundred = [s for s in str(wholePart / 100)]
+                if len(for_hundred) > 1:
+                    wordNumber += "सय" + " "
+                wholePart = int(wholePart % 100)
+            else:
+                # Get index of power
+                lengthOfNumber = len(wholeNumberIntoCharArray)
+                isLengthOfNumberEven = lengthOfNumber % 2 == 0
 
-def _expand_decimal_point(m):
-  return m.group(1).replace('.', ' point ')
+                divisibleNumberInStringFormat = "1"
 
+                if isLengthOfNumberEven:
+                    powerIndex = (lengthOfNumber - 4) / 2
+                    numberOfZerosInDivisibleNumber = lengthOfNumber - 1
 
-def _expand_dollars(m):
-  match = m.group(1)
-  parts = match.split('.')
-  if len(parts) > 2:
-    return match + ' dollars'  # Unexpected format
-  dollars = int(parts[0]) if parts[0] else 0
-  cents = int(parts[1]) if len(parts) > 1 and parts[1] else 0
-  if dollars and cents:
-    dollar_unit = 'dollar' if dollars == 1 else 'dollars'
-    cent_unit = 'cent' if cents == 1 else 'cents'
-    return '%s %s, %s %s' % (dollars, dollar_unit, cents, cent_unit)
-  elif dollars:
-    dollar_unit = 'dollar' if dollars == 1 else 'dollars'
-    return '%s %s' % (dollars, dollar_unit)
-  elif cents:
-    cent_unit = 'cent' if cents == 1 else 'cents'
-    return '%s %s' % (cents, cent_unit)
-  else:
-    return 'zero dollars'
+                else:
+                    numberOfZerosInDivisibleNumber = lengthOfNumber - 2
+                    powerIndex = ((lengthOfNumber - 1) - 4) / 2
+                for i in range(0, numberOfZerosInDivisibleNumber):
+                    divisibleNumberInStringFormat += "0"
 
+                divisibleNumber = int(divisibleNumberInStringFormat)
+                tensNumber = int(math.floor(
+                    float(wholePart / divisibleNumber)))
+                powerIndex = int(powerIndex)
+                wordNumber += str(numbersUptoHundred[tensNumber]) + \
+                    " " + str(powers[powerIndex] + " ")
+                wholePart = int(wholePart % divisibleNumber)
+                # print(wholePart)
 
-def _expand_ordinal(m):
-  return _inflect.number_to_words(m.group(0))
+        if wholePart > 0:
+            wordNumber += numbersUptoHundred[wholePart]
 
+        if len(arrNumber) > 1:
+            decimalPart = int(self.english_to_nepali(arrNumber[1]))
 
-def _expand_number(m):
-  num = int(m.group(0))
-  if num > 1000 and num < 3000:
-    if num == 2000:
-      return 'two thousand'
-    elif num > 2000 and num < 2010:
-      return 'two thousand ' + _inflect.number_to_words(num % 100)
-    elif num % 100 == 0:
-      return _inflect.number_to_words(num // 100) + ' hundred'
-    else:
-      return _inflect.number_to_words(num, andword='', zero='oh', group=2).replace(', ', ' ')
-  else:
-    return _inflect.number_to_words(num, andword='')
+            wordNumber = self.appendPaisa(
+                arrNumber, numbersUptoHundred, wordNumber)
 
+        return wordNumber
 
-def normalize_numbers(text):
-  text = re.sub(_comma_number_re, _remove_commas, text)
-  text = re.sub(_pounds_re, r'\1 pounds', text)
-  text = re.sub(_dollars_re, _expand_dollars, text)
-  text = re.sub(_decimal_number_re, _expand_decimal_point, text)
-  text = re.sub(_ordinal_re, _expand_ordinal, text)
-  text = re.sub(_number_re, _expand_number, text)
-  return text
+    def appendPaisa(self, arrNumber, numbersUptoHundred, wordNumber):
+        isNumberDecimal = len(arrNumber) == 2
+        if isNumberDecimal:
+            paisa = int(self.english_to_nepali(arrNumber[1]))
+            if paisa > 0:
+                #indexOfPaisa = paisa if paisa > 9 else (paisa * 10)
+                # print(indexOfPaisa)
+                wordNumber += numbersUptoHundred[paisa] + " " + "पैसा"
+        return wordNumber
