@@ -16,6 +16,8 @@ from loss_function import Tacotron2Loss
 from logger import Tacotron2Logger
 from hparams import create_hparams
 
+from tqdm import tqdm
+
 
 def reduce_tensor(tensor, n_gpus):
     rt = tensor.clone()
@@ -182,7 +184,6 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
 
     logger = prepare_directories_and_logger(
         output_directory, log_directory, rank)
-
     train_loader, valset, collate_fn = prepare_dataloaders(hparams)
 
     # Load checkpoint if one exists
@@ -204,75 +205,87 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
     is_overflow = False
     # ================ MAIN TRAINNIG LOOP! ===================
     for epoch in range(epoch_offset, hparams.epochs):
-        print("Epoch: {}".format(epoch))
-        for i, batch in enumerate(train_loader):
-            start = time.perf_counter()
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = learning_rate
+        # print("Epoch: {}".format(epoch))
+        with tqdm(train_loader, unit='batch') as pbar:
+            pbar.set_description(f"Epoch: {epoch}")
+            for i, batch in enumerate(train_loader):
+                start = time.perf_counter()
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = learning_rate
 
-            model.zero_grad()
-            x, y = model.parse_batch(batch)
-            y_pred = model(x)
+                model.zero_grad()
+                x, y = model.parse_batch(batch)
+                y_pred = model(x)
 
-            loss = criterion(y_pred, y)
-            if hparams.distributed_run:
-                reduced_loss = reduce_tensor(loss.data, n_gpus).item()
-            else:
-                reduced_loss = loss.item()
-            if hparams.fp16_run:
-                with amp.scale_loss(loss, optimizer) as scaled_loss:
-                    scaled_loss.backward()
-            else:
-                loss.backward()
+                loss = criterion(y_pred, y)
+                if hparams.distributed_run:
+                    reduced_loss = reduce_tensor(loss.data, n_gpus).item()
+                else:
+                    reduced_loss = loss.item()
+                if hparams.fp16_run:
+                    with amp.scale_loss(loss, optimizer) as scaled_loss:
+                        scaled_loss.backward()
+                else:
+                    loss.backward()
 
-            if hparams.fp16_run:
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    amp.master_params(optimizer), hparams.grad_clip_thresh)
-                is_overflow = math.isnan(grad_norm)
-            else:
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    model.parameters(), hparams.grad_clip_thresh)
+                if hparams.fp16_run:
+                    grad_norm = torch.nn.utils.clip_grad_norm_(
+                        amp.master_params(optimizer), hparams.grad_clip_thresh)
+                    is_overflow = math.isnan(grad_norm)
+                else:
+                    grad_norm = torch.nn.utils.clip_grad_norm_(
+                        model.parameters(), hparams.grad_clip_thresh)
 
-            optimizer.step()
+                optimizer.step()
 
-            if not is_overflow and rank == 0:
-                duration = time.perf_counter() - start
-                print("Train loss {} {:.6f} Grad Norm {:.6f} {:.2f}s/it".format(
-                    iteration, reduced_loss, grad_norm, duration))
-                logger.log_training(
-                    reduced_loss, grad_norm, learning_rate, duration, iteration)
+                if not is_overflow and rank == 0:
+                    duration = time.perf_counter() - start
+                    # print("Train loss {} {:.6f} Grad Norm {:.6f} {:.2f}s/it".format(
+                    #     iteration, reduced_loss, grad_norm, duration))
+                    logger.log_training(
+                        reduced_loss, grad_norm, learning_rate, duration,
+                        iteration)
 
-            if not is_overflow and (iteration % hparams.iters_per_checkpoint == 0):
-                validate(model, criterion, valset, iteration,
-                         hparams.batch_size, n_gpus, collate_fn, logger,
-                         hparams.distributed_run, rank)
-                if rank == 0:
-                    checkpoint_path = os.path.join(
-                        output_directory, "checkpoint_{}".format(iteration))
-                    save_checkpoint(model, optimizer, learning_rate, iteration,
-                                    checkpoint_path)
-
-            iteration += 1
+                if not is_overflow and (
+                        iteration % 100 == 0):
+                    validate(model, criterion, valset, iteration,
+                             hparams.batch_size, n_gpus, collate_fn, logger,
+                             hparams.distributed_run, rank)
+                    if rank == 0 and iteration % hparams.iters_per_checkpoint == 0:
+                        checkpoint_path = os.path.join(
+                            output_directory,
+                            "checkpoint_{}".format(iteration))
+                        save_checkpoint(
+                            model, optimizer, learning_rate, iteration,
+                            checkpoint_path)
+                pbar.update()
+                # TODO: Check here
+                pbar.set_postfix(Loss=reduced_loss, Norm=grad_norm)
+                iteration += 1
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', '--output_directory', type=str,
-                        help='directory to save checkpoints')
-    parser.add_argument('-l', '--log_directory', type=str,
-                        help='directory to save tensorboard logs')
-    parser.add_argument('-c', '--checkpoint_path', type=str, default=None,
-                        required=False, help='checkpoint path')
-    parser.add_argument('--warm_start', action='store_true',
-                        help='load model weights only, ignore specified layers')
+                        help='directory to save checkpoints', default="output")
+    parser.add_argument(
+        '-l', '--log_directory', type=str,
+        help='directory to save tensorboard logs', default="logs")
+    parser.add_argument(
+        '-c', '--checkpoint_path', type=str, default=None,
+        required=False, help='checkpoint path')
+    parser.add_argument(
+        '--warm_start', action='store_true',
+        help='load model weights only, ignore specified layers')
     parser.add_argument('--n_gpus', type=int, default=1,
                         required=False, help='number of gpus')
     parser.add_argument('--rank', type=int, default=0,
                         required=False, help='rank of current gpu')
     parser.add_argument('--group_name', type=str, default='group_name',
                         required=False, help='Distributed group name')
-    parser.add_argument('--hparams', type=str,
-                        required=False, help='comma separated name=value pairs')
+    parser.add_argument(
+        '--hparams', type=str, required=False,
+        help='comma separated name=value pairs')
 
     args = parser.parse_args()
     hparams = create_hparams(args.hparams)
@@ -285,6 +298,5 @@ if __name__ == '__main__':
     print("Distributed Run:", hparams.distributed_run)
     print("cuDNN Enabled:", hparams.cudnn_enabled)
     print("cuDNN Benchmark:", hparams.cudnn_benchmark)
-
     train(args.output_directory, args.log_directory, args.checkpoint_path,
           args.warm_start, args.n_gpus, args.rank, args.group_name, hparams)
